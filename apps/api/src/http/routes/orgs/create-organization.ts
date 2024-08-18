@@ -1,12 +1,11 @@
-import { FastifyInstance } from 'fastify'
-import { ZodTypeProvider } from 'fastify-type-provider-zod'
-import z from 'zod'
+import type { FastifyInstance } from 'fastify'
+import type { ZodTypeProvider } from 'fastify-type-provider-zod'
+import { z } from 'zod'
 
 import { auth } from '@/http/middlewares/auth'
+import { BadRequestError } from '@/http/routes/_errors/bad-request-error'
 import { prisma } from '@/lib/prisma'
 import { createSlug } from '@/utils/create-slug'
-
-import { BadRequestError } from '../_errors/bad-request-error'
 
 export async function createOrganization(app: FastifyInstance) {
   app
@@ -21,9 +20,8 @@ export async function createOrganization(app: FastifyInstance) {
           security: [{ bearerAuth: [] }],
           body: z.object({
             name: z.string(),
-            slug: z.string(),
-            domain: z.string().nullable(),
-            shouldAttachUsersByDomain: z.boolean().default(false),
+            domain: z.string().nullish(),
+            shouldAttachUsersByDomain: z.boolean().optional(),
           }),
           response: {
             201: z.object({
@@ -34,13 +32,13 @@ export async function createOrganization(app: FastifyInstance) {
       },
       async (request, reply) => {
         const userId = await request.getCurrentUserId()
-        const { name, slug, domain, shouldAttachUsersByDomain } = request.body
+
+        const { name, domain, shouldAttachUsersByDomain } = request.body
 
         if (domain) {
           const organizationByDomain = await prisma.organization.findUnique({
             where: {
               domain,
-              shouldAttachUsersByDomain: true,
             },
           })
 
@@ -54,7 +52,7 @@ export async function createOrganization(app: FastifyInstance) {
         const organization = await prisma.organization.create({
           data: {
             name,
-            slug: createSlug(slug),
+            slug: createSlug(name),
             domain,
             shouldAttachUsersByDomain,
             ownerId: userId,
@@ -67,7 +65,9 @@ export async function createOrganization(app: FastifyInstance) {
           },
         })
 
-        return reply.status(201).send({ organizationId: organization.id })
+        return reply.status(201).send({
+          organizationId: organization.id,
+        })
       },
     )
 }
